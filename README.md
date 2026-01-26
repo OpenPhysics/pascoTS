@@ -1,5 +1,4 @@
 [![TypeScript](https://img.shields.io/badge/typescript-5.9+-blue)](https://www.npmjs.com/package/pasco-ble)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org/)
 [![Web Bluetooth](https://img.shields.io/badge/Web%20Bluetooth-required-blue)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API)
 
 # PASCO BLE Library
@@ -20,7 +19,6 @@ A TypeScript/JavaScript library for connecting to PASCO Wireless sensors **in we
 - [//code.Node](#codenode)
 - [//control.Node](#controlnode)
 - [PascoBot](#pascobot)
-- [Examples](#examples)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
 
@@ -377,19 +375,6 @@ await bot.stop();
 
 await bot.disconnect();
 ```
-
-## Examples
-
-See the `examples/` directory for complete browser examples:
-
-- `force-sensor.html` - Force sensor with real-time graphing
-- `motion-sensor.html` - Motion sensor with position/velocity display
-- `multi-sensor-graph.html` - Multiple sensors on one graph
-- Browser demos for Code.Node, Control.Node, and PascoBot features
-
-All examples are standalone HTML files that can be opened directly in Chrome/Edge.
-
-For Python examples using PASCO's official library, see [pasco_python_examples repository](https://github.com/PASCOscientific/pasco_python_examples).
 
 ## Troubleshooting
 

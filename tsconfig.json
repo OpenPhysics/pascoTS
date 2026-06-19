@@ -10,12 +10,11 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
-    "baseUrl": "./src",
     "paths": {
-      "@/types/*": ["types/*"],
-      "@/utils/*": ["utils/*"],
-      "@/device/*": ["device/*"],
-      "@/ble/*": ["ble/*"]
+      "@/types/*": ["./src/types/*"],
+      "@/utils/*": ["./src/utils/*"],
+      "@/device/*": ["./src/device/*"],
+      "@/ble/*": ["./src/ble/*"]
     },
 
     /* Emit */

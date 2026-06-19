@@ -1,18 +1,12 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.12/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
   "assist": {
     "actions": {
       "source": {
         "organizeImports": {
           "level": "on",
           "options": {
-            "groups": [
-              ":PACKAGE:",
-              ":BLANK_LINE:",
-              { "source": "@/**" },
-              ":BLANK_LINE:",
-              ":SOURCE:"
-            ]
+            "groups": [":PACKAGE:", ":BLANK_LINE:", { "source": "@/**" }, ":BLANK_LINE:", ":PATH:"]
           }
         }
       }

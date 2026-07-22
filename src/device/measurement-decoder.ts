@@ -269,6 +269,8 @@ export class MeasurementDecoder {
     const prevValue = this._state.getPreviousSensorValue(sensorId, needInput);
     if (prevValue == null) return null;
 
+    // Rate of change over the fixed two-sample window used by the PASCO
+    // protocol (matches the reference implementation's derivative divisor).
     return (inputValue - prevValue) / 2;
   }
 

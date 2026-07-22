@@ -257,6 +257,15 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
         `Connection timeout after ${this._options.connectionTimeout}ms`,
       );
     } catch (e) {
+      // If the connection attempt timed out, the underlying GATT connect may
+      // still be in-flight (or may have since succeeded). Proactively tear it
+      // down so we don't leak a live GATT connection with no reference to it.
+      try {
+        await this._client?.disconnect();
+      } catch {
+        // Best-effort cleanup; ignore errors from disconnecting a client
+        // that never finished connecting.
+      }
       this._client = null;
       this._stateMachine.transitionTo('disconnected', 'connection failed');
       const error =

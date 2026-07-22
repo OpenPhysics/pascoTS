@@ -36,8 +36,12 @@ export function decode64(charVal: string): number {
  */
 export function twosComplement(value: number, byteLen: number): number {
   const bitLen = byteLen * 8;
-  if (value && value > 1 << (bitLen - 1)) {
-    return value - (1 << bitLen);
+  // Use 2 ** n instead of bitwise shifts: JavaScript's `<<` operates on
+  // signed 32-bit integers with a mod-32 shift count, so `1 << 32` wraps to 1
+  // and `1 << 31` is negative. That breaks 4-byte (32-bit) values entirely.
+  const signBit = 2 ** (bitLen - 1);
+  if (value >= signBit) {
+    return value - 2 ** bitLen;
   }
   return value;
 }

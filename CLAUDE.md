@@ -59,7 +59,7 @@ import { validateNumber, validateRange, validateNonEmptyString } from '@/utils/v
 
 function setSpeed(speed: number): void {
   validateNumber(speed, 'speed');
-  validateRange(speed, 'speed', -100, 100);
+  validateRange(speed, -100, 100, 'speed');
 }
 ```
 

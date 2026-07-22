@@ -22,8 +22,10 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
@@ -53,6 +55,8 @@
     "@biomejs/biome": "^2.3.12",
     "@types/web-bluetooth": "^0.0.21",
     "simple-git-hooks": "^2.13.1",
-    "typescript": "^6.0.3"
+    "tsc-alias": "^1.9.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   }
 }

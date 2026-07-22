@@ -430,7 +430,7 @@ Raw BLE Bytes
 
 ### Equation Evaluation
 
-The library uses the `expr-eval` library for safe equation evaluation (avoiding `eval()`):
+The library uses the `mathjs` library for safe equation evaluation (avoiding `eval()`):
 
 ```typescript
 // Example equation from datasheet

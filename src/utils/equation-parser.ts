@@ -96,7 +96,9 @@ export function evaluateEquation(rawEquation: string, variables: EquationVariabl
       return null;
     }
 
-    equation = equation.replace(match, value.toString());
+    // replaceAll (not replace) so every occurrence of a repeated variable
+    // reference like [1] is substituted, not just the first.
+    equation = equation.replaceAll(match, value.toString());
   }
 
   // mathjs uses ^ for power operator (same as Python), no conversion needed
@@ -162,7 +164,7 @@ export function evaluateEquation(rawEquation: string, variables: EquationVariabl
   for (const [_level, eqn] of parentheticVals) {
     if (eqn.startsWith('limit')) {
       const limitResult = evaluateLimitExpression(`limit(${eqn.slice(6)}`);
-      equation = equation.replace(eqn, limitResult.toString());
+      equation = equation.replaceAll(eqn, limitResult.toString());
     }
   }
 

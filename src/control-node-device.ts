@@ -193,9 +193,12 @@ export class ControlNodeDevice extends PASCOBLEDevice {
 
       // Parse the response data using the helper method
       const responseData = this.getResponseData();
-      if (responseData.length >= 8) {
-        // Servo resistance is at indices 3 and 4 (port-based)
-        const value = unpackInt16LE(responseData, (port + 2) * 2);
+      // Servo resistance is a 16-bit value at a port-based offset. Ensure the
+      // response is long enough for the 2 bytes at that offset before reading,
+      // otherwise the DataView read would throw a RangeError.
+      const offset = (port + 2) * 2;
+      if (responseData.length >= offset + 2) {
+        const value = unpackInt16LE(responseData, offset);
         return value * 12.5;
       }
     }
@@ -214,7 +217,7 @@ export class ControlNodeDevice extends PASCOBLEDevice {
     const size = 2;
     const command = [
       PASCOBLEDevice.GCMD_CONTROL_NODE_CMD,
-      PASCOBLEDevice.CTRLNODE_CMD_DETECT_DEVICES,
+      ControlNodeDevice.CTRLNODE_CMD_GET_STEPPER_INFO,
       size,
     ];
 

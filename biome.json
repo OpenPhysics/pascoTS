@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
   "assist": {
     "actions": {
       "source": {
@@ -24,7 +24,7 @@
       "project": "recommended"
     },
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "correctness": {
         "noUnusedVariables": "warn",
         "noUnusedImports": "warn"
@@ -46,6 +46,6 @@
     }
   },
   "files": {
-    "includes": ["src/**/*.ts", "examples/**/*.ts"]
+    "includes": ["src/**/*.ts", "examples/**/*.ts", "tests/**/*.ts"]
   }
 }

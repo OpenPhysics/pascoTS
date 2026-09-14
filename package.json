@@ -57,6 +57,6 @@
     "simple-git-hooks": "^2.13.1",
     "tsc-alias": "^1.9.1",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.0"
   }
 }

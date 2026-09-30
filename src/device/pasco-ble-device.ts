@@ -304,23 +304,31 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
 
   /**
    * Connect to a device using its 6-digit ID
-   * @param pascoDeviceId The device's 6-digit ID (with dash)
+   * @param pascoDeviceId The device's 6-digit ID, e.g. '481-782' (the dash is optional)
    */
   async connectById(pascoDeviceId: string): Promise<void> {
-    if (!pascoDeviceId) {
-      throw new InvalidParameter();
+    const digits = (pascoDeviceId ?? '').trim().replace('-', '');
+    if (!/^\d{6}$/.test(digits)) {
+      throw new InvalidParameter(
+        `Invalid device ID '${pascoDeviceId}': expected 6 digits such as '481-782'`,
+      );
     }
+    const deviceId = `${digits.slice(0, 3)}-${digits.slice(3)}`;
 
     if (this._client !== null) {
       throw new BLEAlreadyConnectedError();
     }
 
     try {
-      const foundDevices = await this.scan(pascoDeviceId);
-      if (foundDevices.length > 0 && foundDevices[0]) {
-        await this.connect(foundDevices[0]);
+      // Device names look like '{DeviceType} {SerialId}-{InterfaceId}' and Web Bluetooth
+      // can only match name prefixes, so filter on '{DeviceType} {SerialId}' for each type.
+      const filters = this._compatibleDevices.map((type) => `${type} ${deviceId}`);
+      const foundDevices = await this._adapter.scan(filters);
+      const device = foundDevices.find((d) => d.name?.includes(deviceId));
+      if (device) {
+        await this.connect(device);
       } else {
-        throw new BLEConnectionError(`Device with ID '${pascoDeviceId}' not found`);
+        throw new BLEConnectionError(`Device with ID '${deviceId}' not found`);
       }
     } catch (error) {
       if (error instanceof BLEConnectionError) {

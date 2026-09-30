@@ -54,6 +54,8 @@ src/
 ├── index.ts                 # Public API exports (stable)
 ├── internal.ts              # Internal/advanced API exports
 ├── browser-support.ts       # Browser compatibility detection
+├── errors.ts                # Custom error classes
+├── units.ts                 # Unit conversion
 ├── code-node-device.ts      # Code.Node controls
 ├── control-node-device.ts   # Control.Node controls
 ├── pasco-bot.ts             # Robotics interface
@@ -74,14 +76,18 @@ src/
 │   └── index.ts             # BLE adapter factory
 ├── types/
 │   ├── ble.ts               # BLE type definitions
+│   ├── branded.ts           # Branded (nominal) types
 │   ├── measurement.ts       # Measurement types
-│   └── device.ts            # Device/sensor types
+│   ├── device.ts            # Device/sensor types
+│   └── index.ts             # Type exports
 └── utils/
     ├── binary.ts            # Binary data utilities
     ├── math.ts              # Mathematical functions
     ├── equation-parser.ts   # Safe equation evaluation
     ├── event-emitter.ts     # Typed event emitter
-    └── retry.ts             # Retry logic utilities
+    ├── retry.ts             # Retry and timeout utilities
+    ├── validation.ts        # Parameter validation
+    └── index.ts             # Utility exports
 ```
 
 ### Device Hierarchy

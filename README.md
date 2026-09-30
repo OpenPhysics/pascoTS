@@ -53,7 +53,7 @@ The package is published as ES modules and depends on `mathjs`, so load it from 
 <script type="importmap">
 {
   "imports": {
-    "pasco-ble": "https://esm.sh/pasco-ble@0.3.67"
+    "pasco-ble": "https://esm.sh/pasco-ble@0.3.70"
   }
 }
 </script>
@@ -62,7 +62,7 @@ The package is published as ES modules and depends on `mathjs`, so load it from 
 </script>
 ```
 
-Alternatively: `https://cdn.jsdelivr.net/npm/pasco-ble@0.3.67/+esm`. Importing `dist/index.js` directly from unpkg will **not** work, because the browser cannot resolve the `mathjs` import.
+Alternatively: `https://cdn.jsdelivr.net/npm/pasco-ble@0.3.70/+esm`. Importing `dist/index.js` directly from unpkg will **not** work, because the browser cannot resolve the `mathjs` import.
 
 ## Browser Compatibility
 
@@ -129,7 +129,7 @@ For more detail (browser name, support level, and a user-facing message), use `c
   <div id="output"></div>
 
   <script type="module">
-    import { PASCOBLEDevice } from 'https://esm.sh/pasco-ble@0.3.67';
+    import { PASCOBLEDevice } from 'https://esm.sh/pasco-ble@0.3.70';
 
     document.getElementById('connect').onclick = async () => {
       const sensor = new PASCOBLEDevice();
@@ -165,7 +165,7 @@ For more detail (browser name, support level, and a user-facing message), use `c
   <div id="output"></div>
 
   <script type="module">
-    import { PASCOBLEDevice } from 'https://esm.sh/pasco-ble@0.3.67';
+    import { PASCOBLEDevice } from 'https://esm.sh/pasco-ble@0.3.70';
 
     const sensor = new PASCOBLEDevice();
     let reading = false;
@@ -542,7 +542,7 @@ Live browser demos (force, motion, Smart Cart 3D, //code.Node, //control.Node, X
 ### 5. `Failed to resolve module specifier "mathjs"` or 400 errors from the CDN
 
 - Load the library from an ESM CDN (esm.sh or jsDelivr `+esm`), not raw `dist/index.js` (see [Using a CDN](#using-a-cdn-no-build-step))
-- Pin a version (`pasco-ble@0.3.67`) rather than relying on the latest
+- Pin a version (`pasco-ble@0.3.70`) rather than relying on the latest
 
 ## Development
 

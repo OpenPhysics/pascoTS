@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 This file provides guidance for AI assistants working on the pasco-ble codebase.
 

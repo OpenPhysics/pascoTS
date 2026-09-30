@@ -9,7 +9,8 @@ npm run build      # TypeScript compilation to dist/
 npm run lint       # Biome linter check
 npm run lint:fix   # Biome linter with auto-fix
 npm run format     # Biome formatter
-npm run check      # Combined lint + format with auto-fix
+npm run check      # Type-check only (tsc --noEmit)
+npm run test       # Vitest unit tests
 npm run clean      # Remove dist/ directory
 ```
 
@@ -148,9 +149,7 @@ throw new MeasurementNotFound('Temperature');
    override async disconnect(): Promise<void> { ... }
    ```
 
-3. **Biome Pre-commit Hook**: Staged files are checked before commit. Run `npm run check` to fix issues.
-
-4. **No Tests in This Repo**: The library lacks automated tests. Manual testing with physical PASCO devices is required.
+3. **Biome Pre-commit Hook**: Staged files are checked before commit. Run `npm run lint:fix` to fix lint and format issues.
 
 ## File Organization
 

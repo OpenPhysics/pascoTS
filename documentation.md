@@ -64,6 +64,7 @@ src/
 ├── device/
 │   ├── pasco-ble-device.ts      # Base device class (connection/protocol)
 │   ├── sensor-manager.ts        # Sensor state and operations
+│   ├── sensor-state.ts          # Centralized sensor state container
 │   ├── sensor-initializer.ts    # Sensor initialization from datasheets
 │   ├── measurement-decoder.ts   # Data decoding pipeline
 │   ├── protocol-handler.ts      # BLE communication protocol

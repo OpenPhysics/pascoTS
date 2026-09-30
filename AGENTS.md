@@ -58,7 +58,7 @@ New utilities go in `internal.ts` unless specifically intended for end users.
 
 Use validation utilities for consistent error messages:
 ```typescript
-import { validateNumber, validateRange, validateNonEmptyString } from '@/utils/validation';
+import { validateNumber, validateRange, validateNonEmptyString } from '@/utils/validation.js';
 
 function setSpeed(speed: number): void {
   validateNumber(speed, 'speed');
@@ -70,7 +70,7 @@ function setSpeed(speed: number): void {
 
 For building command byte arrays:
 ```typescript
-import { splitInt16LE, int32ToBytes } from '@/utils/binary';
+import { splitInt16LE, int32ToBytes } from '@/utils/binary.js';
 
 const [low, high] = splitInt16LE(0x1234);  // [0x34, 0x12]
 const bytes = int32ToBytes(value);          // Spreadable array
@@ -79,7 +79,7 @@ const bytes = int32ToBytes(value);          // Spreadable array
 ### Timeout and Retry (`src/utils/retry.ts`)
 
 ```typescript
-import { withRetry, withTimeout, TimeoutError } from '@/utils/retry';
+import { withRetry, withTimeout, TimeoutError } from '@/utils/retry.js';
 
 // Retry with exponential backoff
 const result = await withRetry(() => device.connect(), { maxRetries: 3 });
@@ -100,7 +100,7 @@ try {
 ### Math Operations (`src/utils/math.ts`)
 
 ```typescript
-import { roundToPrecision, limit } from '@/utils/math';
+import { roundToPrecision, limit } from '@/utils/math.js';
 
 const rounded = roundToPrecision(3.14159, 2);  // 3.14
 const clamped = limit(value, 0, 100);

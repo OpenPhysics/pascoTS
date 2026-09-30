@@ -29,12 +29,12 @@ The project uses strict TypeScript configuration with all strict checks enabled.
 
 ### Path Aliases
 
-Use path aliases for internal imports:
+Use path aliases (with the `.js` extension, per TypeScript's ESM convention) for internal imports:
 ```typescript
-import { BLEDevice } from '@/types/ble';
-import { withRetry } from '@/utils/retry';
-import { PASCOBLEDevice } from '@/device/pasco-ble-device';
-import { BLEAdapterBase } from '@/ble/ble-adapter';
+import type { BLEDevice } from '@/types/ble.js';
+import { withRetry } from '@/utils/retry.js';
+import { PASCOBLEDevice } from '@/device/pasco-ble-device.js';
+import { BLEAdapterBase } from '@/ble/ble-adapter.js';
 ```
 
 Aliases are configured in `tsconfig.json`:
@@ -42,6 +42,8 @@ Aliases are configured in `tsconfig.json`:
 - `@/utils/*` → `src/utils/*`
 - `@/device/*` → `src/device/*`
 - `@/ble/*` → `src/ble/*`
+
+`tsc` does not rewrite these aliases, so `npm run build` runs `tsc-alias` afterwards to turn them into relative paths in `dist/`. If any `@/` import survives in `dist/`, the published package breaks in browsers and CDNs (this happened in 0.3.65). Vitest resolves the aliases via `vitest.config.ts`.
 
 ### Export Structure
 
@@ -121,8 +123,10 @@ class MyDevice extends PASCOBLEDevice {
 
 ### Event Emitter Debug Mode
 
+`PASCOBLEDevice` extends `TypedEventEmitter`, so the device itself is the emitter:
+
 ```typescript
-this._emitter.setDebugMode(true);  // Logs errors in event handlers
+this.setDebugMode(true);  // Logs errors in event handlers
 ```
 
 ## Error Handling
@@ -150,6 +154,20 @@ throw new MeasurementNotFound('Temperature');
    ```
 
 3. **Biome Pre-commit Hook**: Staged files are checked before commit. Run `npm run lint:fix` to fix lint and format issues.
+
+## Testing
+
+Unit tests live in `tests/` and run with Vitest in Node (`npm test`). They cover decoding, binary and math helpers, and `connectById`. BLE-dependent code can be tested without hardware by passing a fake `BLEAdapterBase` to the `PASCOBLEDevice` constructor (see `tests/connect-by-id.test.ts`). Browser-level behavior (the Web Bluetooth picker, real sensor data) still needs manual testing with a physical device.
+
+## Releasing
+
+```bash
+npm version patch   # bumps version, commits, tags
+npm publish         # prepublishOnly runs the build (tsc + tsc-alias)
+git push --follow-tags
+```
+
+Before publishing, confirm `grep -rn "from '@/" dist` finds nothing. npm requires 2FA; if `npm publish` fails with `EOTP`, re-run only `npm publish` rather than `npm version` again. The [pasco-BLE-examples](https://github.com/OpenPhysics/pasco-BLE-examples) importmaps pin an exact version and should be bumped after a release.
 
 ## File Organization
 

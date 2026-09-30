@@ -66,16 +66,6 @@ function setSpeed(speed: number): void {
 }
 ```
 
-### Binary Operations (`src/utils/binary.ts`)
-
-For building command byte arrays:
-```typescript
-import { splitInt16LE, int32ToBytes } from '@/utils/binary.js';
-
-const [low, high] = splitInt16LE(0x1234);  // [0x34, 0x12]
-const bytes = int32ToBytes(value);          // Spreadable array
-```
-
 ### Timeout and Retry (`src/utils/retry.ts`)
 
 ```typescript
@@ -95,15 +85,6 @@ try {
     console.log('Operation timed out');
   }
 }
-```
-
-### Math Operations (`src/utils/math.ts`)
-
-```typescript
-import { roundToPrecision, limit } from '@/utils/math.js';
-
-const rounded = roundToPrecision(3.14159, 2);  // 3.14
-const clamped = limit(value, 0, 100);
 ```
 
 ## Device Class Patterns
@@ -131,14 +112,7 @@ this.setDebugMode(true);  // Logs errors in event handlers
 
 ## Error Handling
 
-Custom errors are defined in `src/errors.ts`. Use specific error types:
-```typescript
-import { InvalidParameter, DeviceNotConnected, MeasurementNotFound } from './errors';
-
-throw new InvalidParameter('x must be in range [0-4]');
-throw new DeviceNotConnected();
-throw new MeasurementNotFound('Temperature');
-```
+Use the specific error classes from `src/errors.ts` (`InvalidParameter`, `DeviceNotConnected`, `MeasurementNotFound`, ...). The README lists them all.
 
 ## Common Pitfalls
 

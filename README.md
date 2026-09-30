@@ -1,4 +1,5 @@
-[![TypeScript](https://img.shields.io/badge/typescript-5.9+-blue)](https://www.npmjs.com/package/pasco-ble)
+[![npm](https://img.shields.io/npm/v/pasco-ble)](https://www.npmjs.com/package/pasco-ble)
+[![TypeScript](https://img.shields.io/badge/types-included-blue)](https://www.npmjs.com/package/pasco-ble)
 [![Web Bluetooth](https://img.shields.io/badge/Web%20Bluetooth-required-blue)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API)
 
 # PASCO BLE Library
@@ -16,10 +17,17 @@ A TypeScript/JavaScript library for connecting to PASCO Wireless sensors **in we
 - [Compatible Sensors](#compatible-sensors)
 - [Quick Start](#quick-start)
 - [API Reference](#api-reference)
+- [Events](#events)
+- [Streaming Data](#streaming-data)
+- [Device Options](#device-options)
+- [Error Handling](#error-handling)
+- [Unit Conversion](#unit-conversion)
 - [//code.Node](#codenode)
 - [//control.Node](#controlnode)
 - [PascoBot](#pascobot)
+- [Examples](#examples)
 - [Troubleshooting](#troubleshooting)
+- [Development](#development)
 - [License](#license)
 
 ## Getting Started
@@ -35,7 +43,26 @@ npm install pasco-ble
 - HTTPS connection (or localhost for development)
 - User gesture to initiate Bluetooth operations
 
-No additional setup or native dependencies required!
+No native dependencies required.
+
+### Using a CDN (no build step)
+
+The package is published as ES modules and depends on `mathjs`, so load it from an ESM-aware CDN that rewrites bare imports, such as [esm.sh](https://esm.sh) or [jsDelivr](https://www.jsdelivr.com). Pin the version so a new release can't change your page unexpectedly:
+
+```html
+<script type="importmap">
+{
+  "imports": {
+    "pasco-ble": "https://esm.sh/pasco-ble@0.3.67"
+  }
+}
+</script>
+<script type="module">
+  import { PASCOBLEDevice } from 'pasco-ble';
+</script>
+```
+
+Alternatively: `https://cdn.jsdelivr.net/npm/pasco-ble@0.3.67/+esm`. Importing `dist/index.js` directly from unpkg will **not** work, because the browser cannot resolve the `mathjs` import.
 
 ## Browser Compatibility
 
@@ -62,6 +89,8 @@ if (!isWebBluetoothSupported()) {
   alert('Please use Chrome, Edge, or Opera to connect to sensors.');
 }
 ```
+
+For more detail (browser name, support level, and a user-facing message), use `checkBrowserSupport()`. `checkBluetoothAvailability()` additionally checks whether a Bluetooth adapter is available.
 
 ## Compatible Sensors
 
@@ -100,7 +129,7 @@ if (!isWebBluetoothSupported()) {
   <div id="output"></div>
 
   <script type="module">
-    import { PASCOBLEDevice } from 'https://unpkg.com/pasco-ble/dist/index.js';
+    import { PASCOBLEDevice } from 'https://esm.sh/pasco-ble@0.3.67';
 
     document.getElementById('connect').onclick = async () => {
       const sensor = new PASCOBLEDevice();
@@ -136,29 +165,23 @@ if (!isWebBluetoothSupported()) {
   <div id="output"></div>
 
   <script type="module">
-    import { PASCOBLEDevice } from 'https://unpkg.com/pasco-ble/dist/index.js';
+    import { PASCOBLEDevice } from 'https://esm.sh/pasco-ble@0.3.67';
 
-    let reading = false;
     const sensor = new PASCOBLEDevice();
+    let reading = false;
 
     document.getElementById('connect').onclick = async () => {
-      const devices = await sensor.scan();
+      const [device] = await sensor.scan();
+      if (!device) return;  // User cancelled the picker
 
-      if (devices.length > 0) {
-        await sensor.connect(devices[0]);
+      await sensor.connect(device);
+      console.log('Available:', sensor.getMeasurementList());
 
-        // Get available measurements
-        const measurements = sensor.getMeasurementList();
-        console.log('Available:', measurements);
-
-        // Read continuously
-        reading = true;
-        while (reading) {
-          const temp = await sensor.readData('Temperature');
-          document.getElementById('output').textContent =
-            `Temperature: ${temp} ${sensor.getMeasurementUnit('Temperature')}`;
-          await new Promise(r => setTimeout(r, 100));
-        }
+      const unit = sensor.getMeasurementUnit('Temperature');
+      reading = true;
+      for await (const temp of sensor.streamData('Temperature', 100)) {
+        if (!reading) break;
+        document.getElementById('output').textContent = `Temperature: ${temp} ${unit}`;
       }
     };
 
@@ -178,14 +201,16 @@ if (!isWebBluetoothSupported()) {
 ```typescript
 import { PASCOBLEDevice } from 'pasco-ble';
 
-const device = new PASCOBLEDevice();
+const device = new PASCOBLEDevice(options?);  // See Device Options
 
 // Scanning & Connection
-await device.scan(filter?: string);           // Scan for devices (optional name filter)
-await device.connect(bleDevice);              // Connect to a scanned device
-await device.connectById('123-456');          // Connect by 6-digit device ID
+await device.scan(filter?: string);           // Open the browser's device picker (optional name-prefix filter)
+await device.connect(bleDevice);              // Connect to a device returned by scan()
+await device.connectById('123-456');          // Scan + connect by 6-digit device ID
 await device.disconnect();                    // Disconnect from device
+await device.reconnect();                     // Reconnect to the last device; resolves true on success
 device.isConnected();                         // Check connection status
+device.connectionState;                       // 'disconnected' | 'connecting' | 'connected' | 'disconnecting' | 'reconnecting'
 
 // Device Information
 device.name;                                  // Device name
@@ -199,8 +224,106 @@ device.getMeasurementUnit(measurement);       // Get unit for a measurement
 device.getMeasurementUnitList(measurements);  // Get units for multiple measurements
 
 // Reading Data
-await device.readData(measurement);           // Read single measurement
-await device.readDataList(measurements);      // Read multiple measurements
+await device.readData(measurement);           // Read single measurement (number | null)
+await device.readDataList(measurements);      // Read multiple measurements (Record<string, number | null>)
+device.streamData(measurement, intervalMs?);  // Async iterator of readings (default 100 ms)
+device.streamDataList(measurements, intervalMs?);
+```
+
+> **Web Bluetooth note:** browsers do not allow silent scanning. `scan()` opens the browser's device picker and resolves with the single device the user selects (or an empty array if they cancel). It must be called from a user gesture such as a button click.
+
+## Events
+
+`PASCOBLEDevice` (and every device class built on it) is a typed event emitter:
+
+```typescript
+device.on('connected', ({ name, address }) => console.log(`Connected to ${name}`));
+device.on('disconnected', ({ reason }) => console.log('Disconnected', reason));
+device.on('stateChange', ({ previousState, newState }) => console.log(previousState, '→', newState));
+device.on('sensorsReady', ({ sensors }) => console.log('Sensors:', sensors));
+device.on('data', ({ measurement, value, unit }) => console.log(measurement, value, unit));
+device.on('error', ({ error, context }) => console.error(context, error));
+
+device.once('connected', handler);   // Fire once
+device.off('data', handler);         // Remove a listener
+```
+
+`data` events are emitted for every read (disable with `emitDataEvents: false`). Raw BLE `notification` events are off by default (`emitNotificationEvents: true` to enable).
+
+## Streaming Data
+
+```typescript
+// One measurement
+for await (const force of device.streamData('Force', 50)) {
+  console.log(force);
+  if (force !== null && force > 20) break;   // Breaking stops the stream
+}
+
+// Several measurements at once
+for await (const data of device.streamDataList(['Position', 'Velocity'], 100)) {
+  console.log(data.Position, data.Velocity);
+}
+```
+
+Streams end automatically when the device disconnects.
+
+## Device Options
+
+```typescript
+import { PASCOBLEDevice } from 'pasco-ble';
+
+const device = new PASCOBLEDevice({
+  connectionTimeout: 10000,     // ms to wait for connection (default 10000)
+  commandTimeout: 5000,         // ms to wait for command responses (default 5000)
+  retry: { maxRetries: 3 },     // Retry BLE operations with exponential backoff (0 disables)
+  autoReconnect: true,          // Reconnect after an unexpected disconnect (default false)
+  maxReconnectAttempts: 3,      // default 3
+  reconnectDelay: 2000,         // ms between attempts (default 2000)
+  logLevel: 'warn',             // 'none' | 'error' | 'warn' | 'info' | 'debug' (default 'error')
+});
+```
+
+The defaults are exported as `DEFAULT_DEVICE_OPTIONS`.
+
+## Error Handling
+
+All library errors extend `PASCOError` and carry an `ErrorCode`:
+
+```typescript
+import { isPASCOError, isRetryableError, MeasurementNotFound } from 'pasco-ble';
+
+try {
+  await device.readData('Temprature');
+} catch (error) {
+  if (error instanceof MeasurementNotFound) {
+    console.log('Try one of:', device.getMeasurementList());
+  } else if (isPASCOError(error)) {
+    console.error(error.code, error.message, isRetryableError(error));
+  }
+}
+```
+
+| Error | When |
+|-------|------|
+| `BLEScanFailed` | Scanning failed |
+| `BLEConnectionError` | Connection failed or device not found |
+| `BLEAlreadyConnectedError` | `connect()` called while connected |
+| `DeviceNotConnected` | Operation requires a connection |
+| `CommunicationError` | BLE command failed or timed out |
+| `MeasurementNotFound` / `SensorNotFound` | Unknown measurement or sensor name |
+| `CouldNotDecodeData` | Sensor data could not be decoded |
+| `SensorSetupError` | Sensor initialization failed |
+| `InvalidParameter` / `InvalidEquation` | Bad argument or datasheet equation |
+
+## Unit Conversion
+
+```typescript
+import { convertUnit, getUnitGroup, getUnitsInGroup, getDefaultUnit } from 'pasco-ble';
+
+convertUnit(25, 'DegC', 'DegF');          // 77
+getUnitGroup('DegC');                     // 'Temperature'
+getUnitsInGroup('Temperature');           // ['DegC', 'DegF', 'K']
+getDefaultUnit('Temperature', true);      // 'DegF' (US default)
 ```
 
 ## Python to TypeScript
@@ -233,7 +356,8 @@ The //code.Node features a 5x5 LED matrix, RGB LED, speaker, and various sensors
 import { CodeNodeDevice, Icons } from 'pasco-ble';
 
 const codeNode = new CodeNodeDevice();
-await codeNode.connectById('481-782');
+const [node] = await codeNode.scan('//code.Node');   // Picker shows only //code.Nodes
+await codeNode.connect(node);
 
 // 5x5 LED Matrix
 await codeNode.setLedInArray(2, 2, 255);              // Set single LED (x, y, intensity)
@@ -268,13 +392,16 @@ const button = await codeNode.readData('Button1');
 
 ### Available Icons
 
+`Icons` is also exported as `LEDIcons`. `getIcon()` and `getWord()` convert icons and text into LED coordinate lists.
+
 ```typescript
 import { Icons } from 'pasco-ble';
 
 Icons.heart      Icons.heartSmall   Icons.smile
 Icons.sad        Icons.surprise     Icons.star
 Icons.arrowTop   Icons.arrowLeft    Icons.arrowBottom
-Icons.arrowRight Icons.alien
+Icons.arrowRight Icons.arrowTopLeft Icons.arrowTopRight
+Icons.arrowBottomLeft Icons.arrowBottomRight Icons.alien
 ```
 
 ## //control.Node
@@ -285,7 +412,8 @@ The //control.Node can control stepper motors, servos, and power outputs, plus c
 import { ControlNodeDevice } from 'pasco-ble';
 
 const controlNode = new ControlNodeDevice();
-await controlNode.connectById('664-591');
+const [node] = await controlNode.scan('//control.Node');
+await controlNode.connect(node);
 ```
 
 ### Stepper Motors
@@ -358,8 +486,9 @@ High-level robotics interface for wheeled robots.
 ```typescript
 import { PascoBot } from 'pasco-ble';
 
-const bot = new PascoBot();
-await bot.connectById('664-591');
+const bot = new PascoBot();                  // A //control.Node-based robot
+const [node] = await bot.scan('//control.Node');
+await bot.connect(node);
 
 // Drive forward (speed in cm/s, acceleration in cm/s²)
 await bot.drive(10, 5);
@@ -375,6 +504,10 @@ await bot.stop();
 
 await bot.disconnect();
 ```
+
+## Examples
+
+Live browser demos (force, motion, Smart Cart 3D, //code.Node, //control.Node, X-Y and multi-sensor graphing) are in the [pasco-BLE-examples](https://github.com/OpenPhysics/pasco-BLE-examples) repository.
 
 ## Troubleshooting
 
@@ -405,6 +538,23 @@ await bot.disconnect();
 - Use `getMeasurementList()` to see available measurements
 - Measurement names are case-sensitive
 - Some measurements require specific sensors to be connected
+
+### 5. `Failed to resolve module specifier "mathjs"` or 400 errors from the CDN
+
+- Load the library from an ESM CDN (esm.sh or jsDelivr `+esm`), not raw `dist/index.js` (see [Using a CDN](#using-a-cdn-no-build-step))
+- Pin a version (`pasco-ble@0.3.67`) rather than relying on the latest
+
+## Development
+
+```bash
+npm install
+npm run build      # tsc + tsc-alias → dist/
+npm test           # Vitest unit tests
+npm run lint       # Biome
+npm run check      # Type-check only (tsc --noEmit)
+```
+
+Requires Node.js 24+. Architecture and protocol details are in [documentation.md](documentation.md).
 
 ## License
 

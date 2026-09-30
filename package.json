@@ -1,6 +1,6 @@
 {
   "name": "pasco-ble",
-  "version": "0.3.67",
+  "version": "0.3.68",
   "description": "Browser library for PASCO wireless BLE sensors using Web Bluetooth",
   "type": "module",
   "main": "./dist/index.js",

@@ -247,15 +247,35 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
     this._lastConnectedDevice = bleDevice;
 
     this._logger.info('Connecting to device:', bleDevice.name);
-    this._client = this._adapter.createClient(bleDevice);
 
     try {
+      this._client = this._adapter.createClient(bleDevice);
       // Create connection with timeout
       await withTimeout(
         this._client.connect(),
         this._options.connectionTimeout,
         `Connection timeout after ${this._options.connectionTimeout}ms`,
       );
+
+      this._setDeviceParams(bleDevice);
+      this._protocol.setClient(this._client);
+      this._protocol.buildHandleServiceMap();
+      await this._protocol.startNotifications();
+
+      // Special handling for Rotary Motion sensor
+      if (this._devType === 'Rotary Motion') {
+        await this._protocol.writeAwaitCallback(PROTOCOL.SENSOR_SERVICE_ID, [
+          ...PROTOCOL.WIRELESS_RMS_START,
+        ]);
+      }
+
+      await this._initializeDevice();
+
+      this._stateMachine.transitionTo('connected', 'initialization complete');
+      this._reconnectAttempts = 0;
+
+      this._logger.info('Connected to device:', this._name);
+      this.emit('connected', { name: this._name, address: this._address });
     } catch (e) {
       // If the connection attempt timed out, the underlying GATT connect may
       // still be in-flight (or may have since succeeded). Proactively tear it
@@ -267,6 +287,8 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
         // that never finished connecting.
       }
       this._client = null;
+      this._protocol.setClient(null);
+      this._sensorManager.reset();
       this._stateMachine.transitionTo('disconnected', 'connection failed');
       const error =
         e instanceof BLEConnectionError
@@ -278,28 +300,6 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
       this.emit('error', { error, context: 'connect' });
       throw error;
     }
-
-    this._setDeviceParams(bleDevice);
-    this._protocol.setClient(this._client);
-    this._protocol.buildHandleServiceMap();
-    await this._protocol.startNotifications();
-
-    // Special handling for Rotary Motion sensor
-    if (this._devType === 'Rotary Motion') {
-      await this._protocol.writeAwaitCallback(PROTOCOL.SENSOR_SERVICE_ID, [
-        ...PROTOCOL.WIRELESS_RMS_START,
-      ]);
-    }
-
-    await this._initializeDevice();
-
-    // Transition to connected state
-    this._stateMachine.transitionTo('connected', 'initialization complete');
-    this._reconnectAttempts = 0;
-
-    this._logger.info('Connected to device:', this._name);
-    // Emit connected event
-    this.emit('connected', { name: this._name, address: this._address });
   }
 
   /**

@@ -12,7 +12,7 @@ import { COMPATIBLE_DEVICES } from '@/types/device.js';
 import type { Measurement, SensorChannel } from '@/types/index.js';
 import { decode64 } from '@/utils/binary.js';
 import { type DeviceEvents, TypedEventEmitter } from '@/utils/event-emitter.js';
-import { TimeoutError, withTimeout } from '@/utils/retry.js';
+import { withTimeout } from '@/utils/retry.js';
 
 import {
   BLEAlreadyConnectedError,
@@ -82,6 +82,8 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
   // Connection state machine
   protected _stateMachine: ConnectionStateMachine;
   protected _reconnectAttempts = 0;
+  protected _reconnectGeneration = 0;
+  private _handlingDisconnect = false;
   protected _lastConnectedDevice: BLEDevice | null = null;
 
   // BLE adapter and client
@@ -147,6 +149,7 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
 
     this._adapter = adapter ?? createBLEAdapter();
     this._protocol = new ProtocolHandler();
+    this._protocol.setCommandTimeout(this._options.commandTimeout);
     this._protocol.setNotificationHandler(this._handleNotification.bind(this));
 
     // Apply retry options to protocol handler
@@ -218,8 +221,15 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
     try {
       const filters = sensorNameFilter ? [sensorNameFilter] : [...this._compatibleDevices];
       return await this._adapter.scan(filters);
-    } catch {
-      throw new BLEScanFailed();
+    } catch (error) {
+      if (error instanceof BLEScanFailed) {
+        throw error;
+      }
+      const cause = error instanceof Error ? error : new Error(String(error));
+      const detail = cause.message ? `: ${cause.message}` : '';
+      throw new BLEScanFailed(`Error occurred when trying to scan for a BLE sensor${detail}`, {
+        cause,
+      });
     }
   }
 
@@ -250,6 +260,9 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
 
     try {
       this._client = this._adapter.createClient(bleDevice);
+      this._client.setUnexpectedDisconnectHandler(() => {
+        void this._handleUnexpectedDisconnect();
+      });
       // Create connection with timeout
       await withTimeout(
         this._client.connect(),
@@ -289,13 +302,12 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
       this._client = null;
       this._protocol.setClient(null);
       this._sensorManager.reset();
-      this._stateMachine.transitionTo('disconnected', 'connection failed');
+      this._stateMachine.tryTransitionTo('disconnected', 'connection failed');
+      const cause = e instanceof Error ? e : new Error(String(e));
       const error =
         e instanceof BLEConnectionError
           ? e
-          : e instanceof TimeoutError
-            ? new BLEConnectionError(e.message)
-            : new BLEConnectionError();
+          : new BLEConnectionError(cause.message || 'Could not connect to the sensor', { cause });
       this._logger.error('Connection failed:', error.message);
       this.emit('error', { error, context: 'connect' });
       throw error;
@@ -372,8 +384,10 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
    * Disconnect from the device
    */
   async disconnect(): Promise<void> {
+    // Stop an in-flight auto-reconnect even if GATT is already gone.
+    this._reconnectGeneration++;
     if (!this._stateMachine.canDisconnect) {
-      return; // Already disconnected or disconnecting
+      return;
     }
 
     this._stateMachine.transitionTo('disconnecting', 'disconnect() called');
@@ -422,29 +436,51 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
    * Handle unexpected disconnection with auto-reconnect support
    */
   protected async _handleUnexpectedDisconnect(): Promise<void> {
-    const wasConnected = this._stateMachine.isConnected;
+    if (this._handlingDisconnect) return;
 
-    if (wasConnected) {
+    // A drop during connect() is cleaned up by that call. Mark the state
+    // machine disconnected so isConnected() does not stay true.
+    if (!this._stateMachine.isConnected) {
+      this._stateMachine.tryTransitionTo('disconnected', 'unexpected disconnection');
+      return;
+    }
+
+    this._handlingDisconnect = true;
+    const generation = this._reconnectGeneration;
+    try {
+      this._client = null;
+      this._protocol.setClient(null);
+      this._sensorManager.reset();
       this._stateMachine.tryTransitionTo('disconnected', 'unexpected disconnection');
       this.emit('disconnected', { reason: 'unexpected' });
 
-      // Attempt auto-reconnect if enabled
-      if (
-        this._options.autoReconnect &&
+      if (!this._options.autoReconnect || !this._lastConnectedDevice) {
+        return;
+      }
+
+      while (
+        generation === this._reconnectGeneration &&
         this._reconnectAttempts < this._options.maxReconnectAttempts
       ) {
         this._logger.info(
           `Attempting auto-reconnect (${this._reconnectAttempts + 1}/${this._options.maxReconnectAttempts})`,
         );
 
-        // Add jitter to prevent thundering herd when multiple devices reconnect
-        // Jitter is ±25% of the base delay
+        // Jitter is ±25% of the base delay so many devices do not reconnect together.
         const jitter = this._options.reconnectDelay * 0.25;
-        const delay = this._options.reconnectDelay + (Math.random() * 2 - 1) * jitter;
-
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        await this.reconnect();
+        const delayMs = Math.max(
+          0,
+          this._options.reconnectDelay + (Math.random() * 2 - 1) * jitter,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        if (generation !== this._reconnectGeneration || !this._stateMachine.canConnect) {
+          return;
+        }
+        const reconnected = await this.reconnect();
+        if (reconnected) return;
       }
+    } finally {
+      this._handlingDisconnect = false;
     }
   }
 
@@ -620,8 +656,17 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
   /**
    * Write and await callback (for subclass use)
    */
-  protected async writeAwaitCallback(serviceId: number, command: number[]): Promise<void> {
-    return this._protocol.writeAwaitCallback(serviceId, command);
+  protected async writeAwaitCallback(
+    serviceId: number,
+    command: number[],
+    options?: { retry?: boolean },
+  ): Promise<void> {
+    return this._protocol.writeAwaitCallback(
+      serviceId,
+      command,
+      this._options.commandTimeout,
+      options,
+    );
   }
 
   /**
@@ -765,6 +810,11 @@ export class PASCOBLEDevice extends TypedEventEmitter<DeviceEvents> {
    */
   protected _processDeviceResponse(data: number[]): void {
     this._responseData = new Uint8Array(data);
+
+    if (data[0] === PROTOCOL.CNTRLNODE_PLUGINS_CALLBACK) {
+      this._sensorManager.applyControlNodePlugins(data);
+      return;
+    }
 
     if (data[0] === PROTOCOL.GRSP_RESULT && data[1] === 0x00) {
       if (data[2] === PROTOCOL.GCMD_READ_ONE_SAMPLE) {

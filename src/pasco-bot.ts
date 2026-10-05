@@ -48,10 +48,10 @@ export class PascoBot extends ControlNodeDevice {
 
     await this.rotateSteppersThrough(
       sign * scaledVelocity,
-      sign * 360,
+      Math.abs(sign * 360),
       scaledAngle,
       sign * scaledVelocity,
-      sign * 360,
+      Math.abs(sign * 360),
       scaledAngle,
       true, // await completion
     );

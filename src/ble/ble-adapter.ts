@@ -60,6 +60,7 @@ export abstract class BLEClientBase implements BLEClient {
   protected _isConnected: boolean = false;
   protected _services: { uuid: string; characteristics: BLECharacteristic[] }[] = [];
   protected _notifyCallbacks: Map<string, NotifyCallback> = new Map();
+  private _unexpectedDisconnectHandler: (() => void) | null = null;
 
   constructor(address: string) {
     this._address = address;
@@ -75,6 +76,18 @@ export abstract class BLEClientBase implements BLEClient {
 
   get services(): { uuid: string; characteristics: BLECharacteristic[] }[] {
     return this._services;
+  }
+
+  /**
+   * Called when the link drops without {@link disconnect}.
+   * The device state machine uses this to leave the connected state.
+   */
+  setUnexpectedDisconnectHandler(handler: (() => void) | null): void {
+    this._unexpectedDisconnectHandler = handler;
+  }
+
+  protected _notifyUnexpectedDisconnect(): void {
+    this._unexpectedDisconnectHandler?.();
   }
 
   /**
@@ -156,7 +169,7 @@ export function createPascoUuid(serviceId: number, characteristicId: number): st
  * @returns The service ID (0-9), or -1 if not a valid PASCO UUID
  */
 export function getServiceIdFromUuid(uuid: string): number {
-  const match = uuid.match(PASCO_UUID.SERVICE_ID_PATTERN);
+  const match = uuid.toLowerCase().match(PASCO_UUID.SERVICE_ID_PATTERN);
   if (match?.[1]) {
     return parseInt(match[1], 10);
   }
@@ -170,7 +183,7 @@ export function getServiceIdFromUuid(uuid: string): number {
  * @returns The characteristic ID (0-9), or -1 if not a valid PASCO UUID
  */
 export function getCharacteristicIdFromUuid(uuid: string): number {
-  const match = uuid.match(PASCO_UUID.CHARACTERISTIC_ID_PATTERN);
+  const match = uuid.toLowerCase().match(PASCO_UUID.CHARACTERISTIC_ID_PATTERN);
   if (match?.[1]) {
     return parseInt(match[1], 10);
   }

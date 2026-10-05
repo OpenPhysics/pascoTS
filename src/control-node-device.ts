@@ -6,7 +6,12 @@
  */
 
 import { PASCOBLEDevice } from './device/index.js';
-import { DeviceNotConnected, InvalidParameter, MeasurementNotFound } from './errors.js';
+import {
+  CommunicationError,
+  DeviceNotConnected,
+  InvalidParameter,
+  MeasurementNotFound,
+} from './errors.js';
 import { unpackInt16LE } from './utils/binary.js';
 import { limit } from './utils/math.js';
 import { validateNonEmptyString, validateNumber } from './utils/validation.js';
@@ -338,7 +343,7 @@ export class ControlNodeDevice extends PASCOBLEDevice {
       (distBVal >> 8) & 0xff,
     ];
 
-    await this.writeAwaitCallback(PASCOBLEDevice.SENSOR_SERVICE_ID, command);
+    await this.writeAwaitCallback(PASCOBLEDevice.SENSOR_SERVICE_ID, command, { retry: false });
   }
 
   /**
@@ -443,12 +448,60 @@ export class ControlNodeDevice extends PASCOBLEDevice {
     );
 
     if (awaitCompletion) {
+      const deadline =
+        Date.now() +
+        this._stepperWaitBudgetMs(
+          speedA,
+          accelerationA,
+          distanceA,
+          speedB,
+          accelerationB,
+          distanceB,
+        );
       let degreesRemaining = await this._getStepperRemaining();
       while (degreesRemaining[0] > 0 || degreesRemaining[1] > 0) {
+        if (!this.isConnected()) {
+          throw new DeviceNotConnected();
+        }
+        if (Date.now() >= deadline) {
+          throw new CommunicationError('Timed out waiting for stepper motion to finish');
+        }
         await this._delay(50);
+        if (!this.isConnected()) {
+          throw new DeviceNotConnected();
+        }
         degreesRemaining = await this._getStepperRemaining();
       }
     }
+  }
+
+  /**
+   * How long to wait for a finite stepper move before giving up.
+   * Based on distance, speed, and the configured command timeout.
+   */
+  private _stepperWaitBudgetMs(
+    speedA: number | null,
+    accelerationA: number | null,
+    distanceA: number | null,
+    speedB: number | null,
+    accelerationB: number | null,
+    distanceB: number | null,
+  ): number {
+    const budget = (speed: number | null, acceleration: number | null, distance: number | null) => {
+      const dist = typeof distance === 'number' ? Math.abs(distance) : 0;
+      if (dist === 0) return 0;
+      const spd = Math.abs(speed ?? 0);
+      if (spd <= 0) return this._options.commandTimeout;
+      const cruiseMs = (dist / spd) * 1000;
+      const acc = Math.abs(acceleration ?? 0);
+      const rampMs = acc > 0 ? (spd / acc) * 2000 : 0;
+      return cruiseMs + rampMs + this._options.commandTimeout;
+    };
+    return Math.max(
+      budget(speedA, accelerationA, distanceA),
+      budget(speedB, accelerationB, distanceB),
+      this._options.commandTimeout,
+    );
   }
 
   /**
@@ -545,7 +598,7 @@ export class ControlNodeDevice extends PASCOBLEDevice {
       (period2 >> 8) & 0xff,
     ];
 
-    await this.writeAwaitCallback(PASCOBLEDevice.SENSOR_SERVICE_ID, cmd);
+    await this.writeAwaitCallback(PASCOBLEDevice.SENSOR_SERVICE_ID, cmd, { retry: false });
   }
 
   /**
@@ -623,7 +676,7 @@ export class ControlNodeDevice extends PASCOBLEDevice {
       ...values,
     ];
 
-    await this.writeAwaitCallback(PASCOBLEDevice.SENSOR_SERVICE_ID, cmd);
+    await this.writeAwaitCallback(PASCOBLEDevice.SENSOR_SERVICE_ID, cmd, { retry: false });
   }
 
   /**
@@ -645,7 +698,7 @@ export class ControlNodeDevice extends PASCOBLEDevice {
       (freq >> 8) & 0xff,
     ];
 
-    await this.writeAwaitCallback(PASCOBLEDevice.SENSOR_SERVICE_ID, cmd);
+    await this.writeAwaitCallback(PASCOBLEDevice.SENSOR_SERVICE_ID, cmd, { retry: false });
   }
 
   // ==================== Greenhouse Light ====================
@@ -681,7 +734,7 @@ export class ControlNodeDevice extends PASCOBLEDevice {
       ...values,
     ];
 
-    await this.writeAwaitCallback(PASCOBLEDevice.SENSOR_SERVICE_ID, cmd);
+    await this.writeAwaitCallback(PASCOBLEDevice.SENSOR_SERVICE_ID, cmd, { retry: false });
   }
 
   // ==================== Convenience ====================
@@ -698,16 +751,20 @@ export class ControlNodeDevice extends PASCOBLEDevice {
       PASCOBLEDevice.GCMD_CONTROL_NODE_CMD,
       ControlNodeDevice.CTRLNODE_CMD_STOP_ACCESSORIES,
     ];
-    await this.writeAwaitCallback(PASCOBLEDevice.SENSOR_SERVICE_ID, cmd);
+    await this.writeAwaitCallback(PASCOBLEDevice.SENSOR_SERVICE_ID, cmd, { retry: false });
   }
 
   /**
-   * Disconnect from device, resetting all accessories first
+   * Disconnect from device, resetting all accessories first.
+   * GATT is closed even when the accessory reset fails.
    */
   override async disconnect(): Promise<void> {
-    if (this.isConnected()) {
-      await this.reset();
+    try {
+      if (this.isConnected()) {
+        await this.reset();
+      }
+    } finally {
+      await super.disconnect();
     }
-    await super.disconnect();
   }
 }

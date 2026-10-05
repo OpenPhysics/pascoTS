@@ -126,11 +126,12 @@ export class SensorManager {
   async initializeFromInterface(interfaceId: number): Promise<string[]> {
     this._initializer.initializeFromInterface(interfaceId);
 
-    // Check for pluggable sensors
+    // Fixed channels (//control.Node steppers on interface 1057, and every
+    // non-pluggable port) must be initialized even when the interface also
+    // has hot-plug ports. Plugin IDs arrive later on the service-0 0x82 callback.
+    this._initializer.initializeSensors();
     if (this._initializer.hasPluggableSensors()) {
       await this._scanControlnodePlugins();
-    } else {
-      this._initializer.initializeSensors();
     }
 
     // Return list of sensor names
@@ -442,6 +443,15 @@ export class SensorManager {
     await this._options.protocolHandler.writeAwaitCallback(PROTOCOL.SENSOR_SERVICE_ID, [
       PROTOCOL.CTRLNODE_CMD_DETECT_DEVICES,
     ]);
+  }
+
+  /**
+   * Apply a //control.Node plugin-detection payload (command 0x82).
+   * Service 0 responses are delivered here; sensor-service responses also
+   * arrive through {@link handleMeasurementResponse}.
+   */
+  applyControlNodePlugins(data: number[]): void {
+    this._updateControlnodePluginSensor(data);
   }
 
   /**

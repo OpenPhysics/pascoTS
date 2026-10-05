@@ -68,6 +68,14 @@ export function binaryFloat(value: number, byteLen: number): number {
 }
 
 /**
+ * Bytes addressed by a DataView, honoring byteOffset and byteLength.
+ * `new Uint8Array(view.buffer)` would include bytes outside the view.
+ */
+export function copyDataView(view: DataView): Uint8Array {
+  return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+}
+
+/**
  * Unpack a little-endian float from a byte array
  */
 export function unpackFloat32LE(data: Uint8Array, offset: number = 0): number {

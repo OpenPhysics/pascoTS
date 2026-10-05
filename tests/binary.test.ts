@@ -4,6 +4,7 @@ import {
   binaryFloat,
   binaryFraction,
   buildByteValue,
+  copyDataView,
   decode64,
   int16ToBytes,
   int32ToBytes,
@@ -55,6 +56,20 @@ describe('binaryFloat', () => {
     expect(binaryFloat(0xbf800000, 4)).toBeCloseTo(-1, 6);
     expect(binaryFloat(0x40490fdb, 4)).toBeCloseTo(Math.PI, 5);
     expect(binaryFloat(0xc2f60000, 4)).toBeCloseTo(-123, 4);
+  });
+});
+
+describe('copyDataView', () => {
+  it('uses the view byteOffset and byteLength instead of the whole buffer', () => {
+    const buffer = new ArrayBuffer(8);
+    new Uint8Array(buffer).set([0, 1, 2, 3, 4, 5, 6, 7]);
+    const view = new DataView(buffer, 2, 3);
+
+    const bytes = copyDataView(view);
+
+    expect(Array.from(bytes)).toEqual([2, 3, 4]);
+    expect(bytes.byteLength).toBe(3);
+    expect(bytes.byteOffset).toBe(2);
   });
 });
 

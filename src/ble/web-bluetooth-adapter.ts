@@ -7,8 +7,23 @@
 
 import type { BLECharacteristic, BLEDevice, NotifyCallback } from '@/types/ble.js';
 import { COMPATIBLE_DEVICES } from '@/types/device.js';
+import { copyDataView } from '@/utils/binary.js';
 
 import { BLEAdapterBase, BLEClientBase, getServiceIdFromUuid, isPascoUuid } from './ble-adapter.js';
+
+/** GATT services requested for every PASCO device, including //control.Node PluginB (service 5). */
+const PASCO_OPTIONAL_SERVICES = [
+  '4a5c0000-0000-0000-0000-5c1e741f1c00',
+  '4a5c0001-0000-0000-0000-5c1e741f1c00',
+  '4a5c0002-0000-0000-0000-5c1e741f1c00',
+  '4a5c0003-0000-0000-0000-5c1e741f1c00',
+  '4a5c0004-0000-0000-0000-5c1e741f1c00',
+  '4a5c0005-0000-0000-0000-5c1e741f1c00',
+  '4a5c0006-0000-0000-0000-5c1e741f1c00',
+  '4a5c0007-0000-0000-0000-5c1e741f1c00',
+  '4a5c0008-0000-0000-0000-5c1e741f1c00',
+  '4a5c0009-0000-0000-0000-5c1e741f1c00',
+] as const;
 
 /**
  * Extended BLEDevice that includes the native Web Bluetooth device reference
@@ -112,13 +127,7 @@ export class WebBluetoothAdapter extends BLEAdapterBase {
       // Request device with PASCO service UUID filter
       const device = await navigator.bluetooth.requestDevice({
         filters,
-        optionalServices: [
-          '4a5c0000-0000-0000-0000-5c1e741f1c00', // PASCO main service
-          '4a5c0001-0000-0000-0000-5c1e741f1c00', // PASCO sensor services
-          '4a5c0002-0000-0000-0000-5c1e741f1c00',
-          '4a5c0003-0000-0000-0000-5c1e741f1c00',
-          '4a5c0004-0000-0000-0000-5c1e741f1c00',
-        ],
+        optionalServices: [...PASCO_OPTIONAL_SERVICES],
       });
 
       // Return the selected device with native reference preserved
@@ -157,6 +166,10 @@ export class WebBluetoothClient extends BLEClientBase {
   private _server: BluetoothRemoteGATTServer | null = null;
   private _characteristics: Map<string, BluetoothRemoteGATTCharacteristic> = new Map();
   private _deviceName: string | null;
+  /** Incremented when an attempt is abandoned so a late gatt.connect() cannot stay open. */
+  private _connectGeneration = 0;
+  private _gattDisconnectListener: (() => void) | null = null;
+  private _notifyListeners = new Map<string, (event: Event) => void>();
 
   constructor(address: string, name: string | null = null, nativeDevice?: BluetoothDevice) {
     super(address);
@@ -169,6 +182,8 @@ export class WebBluetoothClient extends BLEClientBase {
       throw new Error('Web Bluetooth API is not available');
     }
 
+    const generation = ++this._connectGeneration;
+
     try {
       // If we don't have a device yet (e.g., connectById flow), we need to request one
       if (!this._device) {
@@ -180,43 +195,77 @@ export class WebBluetoothClient extends BLEClientBase {
         this._device = await navigator.bluetooth.requestDevice({
           filters: filters.length > 0 ? filters : undefined,
           acceptAllDevices: filters.length === 0,
-          optionalServices: [
-            '4a5c0000-0000-0000-0000-5c1e741f1c00',
-            '4a5c0001-0000-0000-0000-5c1e741f1c00',
-            '4a5c0002-0000-0000-0000-5c1e741f1c00',
-            '4a5c0003-0000-0000-0000-5c1e741f1c00',
-            '4a5c0004-0000-0000-0000-5c1e741f1c00',
-          ],
+          optionalServices: [...PASCO_OPTIONAL_SERVICES],
         });
+        this._throwIfAbandoned(generation, null);
       }
 
-      // Connect to GATT server
-      this._server = (await this._device.gatt?.connect()) ?? null;
-      if (!this._server) {
+      // Connect to GATT server. A timeout may abandon this attempt before it resolves.
+      const server = (await this._device.gatt?.connect()) ?? null;
+      this._throwIfAbandoned(generation, server);
+      if (!server) {
         throw new Error('Failed to connect to GATT server');
       }
 
+      this._server = server;
       this._isConnected = true;
       await this.discoverServicesAndCharacteristics();
+      this._throwIfAbandoned(generation, this._server);
 
-      // Set up disconnect handler
-      this._device.addEventListener('gattserverdisconnected', () => {
-        this._isConnected = false;
-        this._server = null;
-      });
+      this._attachGattDisconnectListener();
     } catch (error) {
-      this._isConnected = false;
+      if (generation === this._connectGeneration) {
+        this._isConnected = false;
+      }
       throw error;
     }
   }
 
   async disconnect(): Promise<void> {
+    // Abandon any gatt.connect() that has not returned yet.
+    this._connectGeneration++;
+    this._detachGattDisconnectListener();
+    this._detachAllNotifyListeners();
     if (this._server?.connected) {
       this._server.disconnect();
     }
     this._isConnected = false;
     this._server = null;
     this._characteristics.clear();
+  }
+
+  /**
+   * Drop a GATT server that belongs to an attempt disconnect() or a timeout already gave up on.
+   */
+  private _throwIfAbandoned(generation: number, server: BluetoothRemoteGATTServer | null): void {
+    if (generation === this._connectGeneration) return;
+    this._isConnected = false;
+    if (server?.connected) {
+      server.disconnect();
+    }
+    if (this._server === server) {
+      this._server = null;
+    }
+    throw new Error('Connection attempt abandoned');
+  }
+
+  private _attachGattDisconnectListener(): void {
+    if (!this._device) return;
+    this._detachGattDisconnectListener();
+    this._gattDisconnectListener = () => {
+      this._detachGattDisconnectListener();
+      this._isConnected = false;
+      this._server = null;
+      this._notifyUnexpectedDisconnect();
+    };
+    this._device.addEventListener('gattserverdisconnected', this._gattDisconnectListener);
+  }
+
+  private _detachGattDisconnectListener(): void {
+    if (this._device && this._gattDisconnectListener) {
+      this._device.removeEventListener('gattserverdisconnected', this._gattDisconnectListener);
+    }
+    this._gattDisconnectListener = null;
   }
 
   async discoverServicesAndCharacteristics(): Promise<void> {
@@ -229,13 +278,22 @@ export class WebBluetoothClient extends BLEClientBase {
 
     // Retry logic for service discovery
     const maxRetries = 3;
+    const generation = this._connectGeneration;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        // Check if still connected
-        if (!this._server.connected) {
-          this._server = await this._device!.gatt!.connect();
+        // Check if still connected. A late connect must not outlive an abandoned attempt.
+        if (!this._server?.connected) {
+          const server = (await this._device?.gatt?.connect()) ?? null;
+          this._throwIfAbandoned(generation, server);
+          if (!server) {
+            throw new Error('Failed to connect to GATT server');
+          }
+          this._server = server;
         }
 
+        if (!this._server) {
+          throw new Error('Not connected to GATT server');
+        }
         const services = await this._server.getPrimaryServices();
 
         for (const service of services) {
@@ -268,7 +326,10 @@ export class WebBluetoothClient extends BLEClientBase {
 
         // Success - exit retry loop
         return;
-      } catch {
+      } catch (error) {
+        if (generation !== this._connectGeneration) {
+          throw error;
+        }
         if (attempt < maxRetries) {
           // Wait before retry
           await new Promise((resolve) => setTimeout(resolve, 500));
@@ -303,24 +364,24 @@ export class WebBluetoothClient extends BLEClientBase {
     }
 
     const value = await char.readValue();
-    return new Uint8Array(value.buffer);
+    return copyDataView(value);
   }
 
   async startNotify(uuid: string, callback: NotifyCallback): Promise<void> {
-    const char = this._characteristics.get(uuid.toLowerCase());
+    const key = uuid.toLowerCase();
+    const char = this._characteristics.get(key);
     if (!char) {
       throw new Error(`Characteristic ${uuid} not found`);
     }
 
-    // Store callback
-    this._notifyCallbacks.set(uuid.toLowerCase(), callback);
+    this._notifyCallbacks.set(key, callback);
+    this._removeNotifyListener(key);
 
-    // Set up event listener
     const handleValueChanged = (event: Event) => {
       const target = event.target as BluetoothRemoteGATTCharacteristic;
       const value = target.value;
       if (value) {
-        const data = new Uint8Array(value.buffer);
+        const data = copyDataView(value);
         const serviceId = isPascoUuid(target.uuid) ? getServiceIdFromUuid(target.uuid) : 0;
         const charInfo: BLECharacteristic = {
           uuid: target.uuid,
@@ -331,12 +392,16 @@ export class WebBluetoothClient extends BLEClientBase {
       }
     };
 
+    this._notifyListeners.set(key, handleValueChanged);
     char.addEventListener('characteristicvaluechanged', handleValueChanged);
     await char.startNotifications();
   }
 
   async stopNotify(uuid: string): Promise<void> {
-    const char = this._characteristics.get(uuid.toLowerCase());
+    const key = uuid.toLowerCase();
+    const char = this._characteristics.get(key);
+    this._removeNotifyListener(key);
+    this._notifyCallbacks.delete(key);
     if (!char) {
       return;
     }
@@ -346,7 +411,21 @@ export class WebBluetoothClient extends BLEClientBase {
     } catch {
       // Ignore errors when stopping notifications
     }
+  }
 
-    this._notifyCallbacks.delete(uuid.toLowerCase());
+  private _removeNotifyListener(key: string): void {
+    const listener = this._notifyListeners.get(key);
+    const char = this._characteristics.get(key);
+    if (listener && char) {
+      char.removeEventListener('characteristicvaluechanged', listener);
+    }
+    this._notifyListeners.delete(key);
+  }
+
+  private _detachAllNotifyListeners(): void {
+    for (const key of this._notifyListeners.keys()) {
+      this._removeNotifyListener(key);
+    }
+    this._notifyCallbacks.clear();
   }
 }

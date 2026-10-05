@@ -78,6 +78,7 @@ export {
   binaryFraction,
   buildByteValue,
   bytesToHex,
+  copyDataView,
   decode64,
   packInt16LE,
   packInt32LE,

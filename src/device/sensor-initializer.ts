@@ -146,7 +146,7 @@ export class SensorInitializer {
    * This method:
    * 1. Initializes BLE protocol state (ack counters, data buffers)
    * 2. Loads sensor definition from datasheets
-   * 3. Filters measurements by visibility (excludes internal/derivative measurements)
+   * 3. Filters measurements by visibility (keeps visible derivatives; hides internal rows)
    * 4. Extracts factory calibration IDs
    * 5. Calculates total data size for BLE packet sizing
    * 6. Initializes data storage maps
@@ -155,7 +155,9 @@ export class SensorInitializer {
    * @private
    */
   private _initializeSensor(channel: SensorChannel): void {
-    // Initialize BLE protocol state for this channel
+    // Initialize BLE protocol state for this channel.
+    // Reset the packet size so a second init (plugin detection) does not double it.
+    channel.total_data_size = 0;
     this._state.setAckCounter(channel.id, 0);
     this._state.setDataStack(channel.id, []);
     this._state.initMeasurementsForSensor(channel.id);
@@ -174,12 +176,9 @@ export class SensorInitializer {
       // Store full measurement definition for data decoding
       this._state.setMeasurement(channel.id, mId, { ...m });
 
-      // Build list of user-visible measurements
-      // Filters out:
-      // - Internal measurements (used for calculations but not exposed)
-      // - Derivative measurements (computed from other measurements)
-      // - Hidden measurements (marked as not visible)
-      if (!m.Internal && m.Type !== 'Derivative' && m.Visible) {
+      // User-visible measurements, including Visible derivatives such as Velocity.
+      // Internal rows and non-Visible rows stay hidden.
+      if (!m.Internal && m.Visible) {
         measurements.push(m.NameTag);
       }
 

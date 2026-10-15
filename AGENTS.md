@@ -43,7 +43,7 @@ Aliases are configured in `tsconfig.json`:
 - `@/device/*` → `src/device/*`
 - `@/ble/*` → `src/ble/*`
 
-`tsc` does not rewrite these aliases, so `npm run build` runs `tsc-alias` afterwards to turn them into relative paths in `dist/`. If any `@/` import survives in `dist/`, the published package breaks in browsers and CDNs (this happened in 0.3.65). Vitest resolves the aliases via `vitest.config.ts`.
+`tsc` does not rewrite these aliases, so `npm run build` runs `scripts/rewrite-aliases.js` afterwards to turn them into relative paths in `dist/`. If any `@/` import survives in `dist/`, the published package breaks in browsers and CDNs (this happened in 0.3.65). Vitest resolves the aliases via `vitest.config.ts`.
 
 ### Export Structure
 
@@ -137,7 +137,7 @@ Unit tests live in `tests/` and run with Vitest in Node (`npm test`). They cover
 
 ```bash
 npm version patch   # bumps version, commits, tags
-npm publish         # prepublishOnly runs the build (tsc + tsc-alias)
+npm publish         # prepublishOnly runs the build (tsc + alias rewrite)
 git push --follow-tags
 ```
 

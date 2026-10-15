@@ -548,7 +548,7 @@ Live browser demos (force, motion, Smart Cart 3D, //code.Node, //control.Node, X
 
 ```bash
 npm install
-npm run build      # tsc + tsc-alias → dist/
+npm run build      # tsc + alias rewrite → dist/
 npm test           # Vitest unit tests
 npm run lint       # Biome
 npm run check      # Type-check only (tsc --noEmit)

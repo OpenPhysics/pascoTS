@@ -19,7 +19,14 @@
     "dist"
   ],
   "engines": {
-    "node": ">=24"
+    "node": ">=26"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=26",
+      "onFail": "error"
+    }
   },
   "scripts": {
     "build": "tsc && node scripts/rewrite-aliases.js",

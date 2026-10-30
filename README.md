@@ -554,7 +554,7 @@ npm run lint       # Biome
 npm run check      # Type-check only (tsc --noEmit)
 ```
 
-Requires Node.js 24+. Architecture and protocol details are in [documentation.md](documentation.md).
+Requires Node.js 26+. Architecture and protocol details are in [documentation.md](documentation.md).
 
 ## License
 
